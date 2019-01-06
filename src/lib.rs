@@ -72,3 +72,5 @@ pub mod battery;
 /// with the `framebuffer` and `input` devices directly.
 pub mod appctx;
 pub mod ui_extensions;
+
+pub mod incremental;
