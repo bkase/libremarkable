@@ -36,7 +36,7 @@ pub struct Atomic<A>(A);
 
 impl<A> Patch for Atomic<A> {
     type Change = Last<A>;
-    fn patch(&mut self, m: Self::Change) {
+    fn patch(&mut self, m: Self::Change) -> bool {
         let Atomic(lhs) = self;
         match m {
             Last(Some(next)) => {
@@ -47,13 +47,12 @@ impl<A> Patch for Atomic<A> {
         }
     }
 }
-
 pub struct Jet<A: Patch> {
     position : A,
     velocity : A::Change
 }
 
-impl<A: Patch> Jet {
+impl<A: Patch> Jet<A> {
     pub fn constant(a: A) -> Jet<A> {
         Jet {
             position: a,
@@ -130,7 +129,7 @@ impl<K: Eq + Hash, V: Patch> Patch for IMap<K, V> {
                 Some(v) =>
                     match m2 {
                         MapChange::Update(dv) => {
-                            dirty = dirty || v.patch(dv);
+                            dirty = dirty | v.patch(dv);
                         },
                         MapChange::Remove => {
                             let _ = lhs.remove(&k);
@@ -206,13 +205,13 @@ use framebuffer::FramebufferDraw;
 use framebuffer::FramebufferRefresh;
 
 pub struct TextView {
-    position: Atomic<cgmath::Point2>,
+    position: Atomic<cgmath::Point2<i32>>,
     last_drawn_rect: Option<common::mxcfb_rect>,
     text: Atomic<String>
 }
 
 pub struct TextViewChanges {
-    position: Last<cgmath::Point2>,
+    position: Last<cgmath::Point2<i32>>,
     text: Last<String>
 }
 
@@ -236,7 +235,7 @@ impl Patch for TextView {
     type Change = TextViewChanges;
 
     fn patch(&mut self, rhs: TextViewChanges) -> bool {
-        return self.position.patch(rhs.position) ||
+        return self.position.patch(rhs.position) |
             self.text.patch(rhs.text);
     }
 }
@@ -314,7 +313,7 @@ impl TextView {
 }
 
 pub fn view_(
-    position: Jet<Atomic<cgmath::Point2>>,
+    position: Jet<Atomic<cgmath::Point2<i32>>>,
     text: Jet<Atomic<String>>,
 ) -> Jet<TextView> {
     Jet {
@@ -331,7 +330,7 @@ pub fn view_(
 }
 
 pub type Component<Model: Patch, F: Fn(Model::Change) -> ()> =
-    fn(Jet<Atomic<F>>, Jet<Rc<Model>>, Jet<View>);
+    fn(Jet<Atomic<F>>, Jet<&Model>, Jet<View>);
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -350,13 +349,13 @@ pub fn run<Model: Patch, F: Fn(Model::Change) -> ()>(
     let on_change =
         | model_change | {
              let dv =
-                component(Jet::constant(on_change), Jet { position: on_change_model, velocity: model_change }).velocity;
+                component(Jet::constant(Atomic(on_change)), Jet { position: &on_change_model, velocity: &model_change }).velocity;
              on_change_view.borrow_mut().unwrap().patch_and_redraw(dv);
         };
 
     // bootstrap it
     let initial_view =
-        component(Jet::constant(on_change), Jet::constant(Rc::clone(&initial_model_rc)).position;
+        component(Jet::constant(Atomic(on_change)), Jet::constant(&initial_model_rc).position;
 
     let mut ref v = shared_view.borrow_mut();
     *v = Some(initial_view);
