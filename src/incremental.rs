@@ -1,6 +1,19 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use framebuffer::cgmath;
+use framebuffer::common;
+use framebuffer::common::{color, mxcfb_rect};
+use framebuffer::refresh::PartialRefreshMode;
+use framebuffer::FramebufferDraw;
+use framebuffer::FramebufferRefresh;
+
+use appctx;
+use ui_extensions::element::UIConstraintRefresh;
+
 pub trait Semigroup {
     fn apply(&mut self, rhs: Self);
 }
@@ -14,25 +27,33 @@ pub struct Last<A>(Option<A>);
 impl<A> Semigroup for Last<A> {
     fn apply(&mut self, rhs: Last<A>) {
         match rhs {
-            Last(Some(_)) =>
-                *self = rhs,
-            Last(None) => ()
+            Last(Some(_)) => *self = rhs,
+            Last(None) => (),
         }
     }
 }
 
 impl<A> Monoid for Last<A> {
-    fn one() -> Self { Last(None) }
+    fn one() -> Self {
+        Last(None)
+    }
 }
 
 pub trait Patch {
-    type Change : Monoid;
+    type Change: Monoid;
 
     // returns the dirty bit (true for dirty)
     fn patch(&mut self, m: Self::Change) -> bool;
 }
 
 pub struct Atomic<A>(A);
+
+impl<A: Clone> Clone for Atomic<A> {
+    fn clone(&self) -> Atomic<A> {
+        let Atomic(this) = self;
+        Atomic(this.clone())
+    }
+}
 
 impl<A> Patch for Atomic<A> {
     type Change = Last<A>;
@@ -42,112 +63,106 @@ impl<A> Patch for Atomic<A> {
             Last(Some(next)) => {
                 *lhs = next;
                 true
-            },
-            Last(None) => false
+            }
+            Last(None) => false,
         }
     }
 }
 pub struct Jet<A: Patch> {
-    position : A,
-    velocity : A::Change
+    position: A,
+    velocity: A::Change,
 }
 
 impl<A: Patch> Jet<A> {
     pub fn constant(a: A) -> Jet<A> {
         Jet {
             position: a,
-            velocity: A::Change::one()
+            velocity: A::Change::one(),
         }
     }
 }
 
 impl<A: Patch> Jet<A> {
-    pub fn map_atomic<B,F>(f: F, jet_a: Jet<Atomic<A>>) -> Jet<Atomic<B>>
-        where
-            F: Fn(A) -> B
+    pub fn map_atomic<B, F>(f: F, jet_a: Jet<Atomic<A>>) -> Jet<Atomic<B>>
+    where
+        F: Fn(A) -> B,
     {
-        let Atomic(position) = jetA.position;
-        let Last(velocity) = jetA.velocity;
+        let Atomic(position) = jet_a.position;
+        let Last(velocity) = jet_a.velocity;
         Jet {
             position: Atomic(f(position)),
-            velocity: Last(velocity.map(f))
+            velocity: Last(velocity.map(f)),
         }
     }
 }
 
 // TODO: Impl eq/debug
-pub struct IMap<K: Hash, V>(HashMap<K,V>);
+pub struct IMap<K: Hash, V>(HashMap<K, V>);
 
 pub enum MapChange<V: Patch> {
     Add(V),
     Remove,
-    Update(V::Change)
+    Update(V::Change),
 }
 
-pub struct MapChanges<K: Hash, V: Patch>(HashMap<K,MapChange<V>>);
+pub struct MapChanges<K: Hash, V: Patch>(HashMap<K, MapChange<V>>);
 
 impl<K: Eq + Hash, V: Patch> Semigroup for MapChanges<K, V> {
-    fn apply(&mut self, MapChanges(mut rhs): MapChanges<K,V>) {
+    fn apply(&mut self, MapChanges(mut rhs): MapChanges<K, V>) {
         let MapChanges(lhs) = self;
         for (k, m2) in rhs.drain() {
             match lhs.get_mut(&k) {
-              Some(m1) =>
-                  match m2 {
-                    MapChange::Add(v) =>
-                        *m1 = MapChange::Add(v),
-                    MapChange::Remove =>
-                        *m1 = MapChange::Remove,
-                    MapChange::Update(dv2) =>
-                        match m1 {
-                            MapChange::Add(v) =>
-                                v.patch(dv2),
-                            MapChange::Remove => (),
-                            MapChange::Update(dv1) =>
-                                dv1.apply(dv2)
+                Some(m1) => match m2 {
+                    MapChange::Add(v) => *m1 = MapChange::Add(v),
+                    MapChange::Remove => *m1 = MapChange::Remove,
+                    MapChange::Update(dv2) => match m1 {
+                        MapChange::Add(v) => {
+                            let _ = v.patch(dv2);
                         }
-                  },
-              None => ()
+                        MapChange::Remove => (),
+                        MapChange::Update(dv1) => dv1.apply(dv2),
+                    },
+                },
+                None => (),
             }
         }
     }
 }
 
 impl<K: Eq + Hash, V: Patch> Monoid for MapChanges<K, V> {
-    fn one() -> MapChanges<K,V> {
-        return MapChanges(HashMap::new())
+    fn one() -> MapChanges<K, V> {
+        return MapChanges(HashMap::new());
     }
 }
 
 impl<K: Eq + Hash, V: Patch> Patch for IMap<K, V> {
     type Change = MapChanges<K, V>;
 
-    fn patch(&mut self, MapChanges(mut rhs) : MapChanges<K, V>) -> bool {
+    fn patch(&mut self, MapChanges(mut rhs): MapChanges<K, V>) -> bool {
         let IMap(lhs) = self;
         let mut dirty = false;
         for (k, m2) in rhs.drain() {
             match lhs.get_mut(&k) {
-                Some(v) =>
-                    match m2 {
-                        MapChange::Update(dv) => {
-                            dirty = dirty | v.patch(dv);
-                        },
-                        MapChange::Remove => {
-                            let _ = lhs.remove(&k);
-                            dirty = true;
-                        },
-                        MapChange::Add(v) => {
-                            let _ = lhs.insert(k, v);
-                            dirty = true;
-                        }
+                Some(v) => match m2 {
+                    MapChange::Update(dv) => {
+                        dirty = dirty | v.patch(dv);
                     }
-                None =>
-                    match m2 {
-                        MapChange::Add(v) => {
-                            let _ = lhs.insert(k, v);
-                            dirty = true;
-                        },
-                        _ => ()
+                    MapChange::Remove => {
+                        let _ = lhs.remove(&k);
+                        dirty = true;
                     }
+                    MapChange::Add(v) => {
+                        let _ = lhs.insert(k, v);
+                        dirty = true;
+                    }
+                },
+                None => match m2 {
+                    MapChange::Add(v) => {
+                        let _ = lhs.insert(k, v);
+                        dirty = true;
+                    }
+                    _ => (),
+                },
             }
         }
         dirty
@@ -160,65 +175,57 @@ pub fn insert<K: Eq + Hash, V: Patch>(k: K, v: V) -> MapChanges<K, V> {
     MapChanges(m)
 }
 
-pub fn remove<K: Eq + Hash, V: Patch>(k: K, v: V) -> MapChanges<K, V> {
+pub fn remove<K: Eq + Hash, V: Patch>(k: K) -> MapChanges<K, V> {
     let mut m = HashMap::new();
     m.insert(k, MapChange::Remove);
     MapChanges(m)
 }
 
-pub fn update_at<K: Eq + Hash, V: Patch>(k: K, v: V, c: V::Change) -> MapChanges<K, V> {
+pub fn update_at<K: Eq + Hash, V: Patch>(k: K, c: V::Change) -> MapChanges<K, V> {
     let mut m = HashMap::new();
     m.insert(k, MapChange::Update(c));
     MapChanges(m)
 }
 
 // A new map where values can change but keys are fixed
-pub fn static_<K: Clone + Eq + Hash, V: Patch>(mut xs: HashMap<K, Jet<V>>) -> Jet<IMap<K,V>> {
-
-    let (position, velocity) : (HashMap<K, V>, HashMap<K, MapChange<V>>) =
-        xs.drain()
-            .map(|(k, jet_v)|
-                 (
-                     (k.clone(), jet_v.position),
-                     (k, MapChange::Update(jet_v.velocity))
-                 )
+pub fn static_<K: Clone + Eq + Hash, V: Patch>(mut xs: HashMap<K, Jet<V>>) -> Jet<IMap<K, V>> {
+    let (position, velocity): (HashMap<K, V>, HashMap<K, MapChange<V>>) = xs
+        .drain()
+        .map(|(k, jet_v)| {
+            (
+                (k.clone(), jet_v.position),
+                (k, MapChange::Update(jet_v.velocity)),
             )
-            .unzip();
+        })
+        .unzip();
     Jet {
-        position: IMap(position)
-    ,   velocity: MapChanges(velocity)
+        position: IMap(position),
+        velocity: MapChanges(velocity),
     }
 }
 
 // A new map from a single k-v pair
-pub fn singleton<K: Clone + Eq + Hash, V: Patch>(k: K, v: Jet<V>) -> Jet<IMap<K,V>> {
+pub fn singleton<K: Clone + Eq + Hash, V: Patch>(k: K, v: Jet<V>) -> Jet<IMap<K, V>> {
     let mut m = HashMap::new();
     m.insert(k, v);
     static_(m)
 }
 
-use framebuffer::cgmath;
-use framebuffer::common;
-use framebuffer::common::{color, mxcfb_rect};
-use framebuffer::refresh::PartialRefreshMode;
-use framebuffer::FramebufferDraw;
-use framebuffer::FramebufferRefresh;
-
 pub struct TextView {
     position: Atomic<cgmath::Point2<i32>>,
     last_drawn_rect: Option<common::mxcfb_rect>,
-    text: Atomic<String>
+    text: Atomic<String>,
 }
 
 pub struct TextViewChanges {
     position: Last<cgmath::Point2<i32>>,
-    text: Last<String>
+    text: Last<String>,
 }
 
 impl Semigroup for TextViewChanges {
     fn apply(&mut self, rhs: TextViewChanges) {
         self.position.apply(rhs.position);
-        self.text.apply(rhs.scale);
+        self.text.apply(rhs.text);
     }
 }
 
@@ -226,7 +233,7 @@ impl Monoid for TextViewChanges {
     fn one() -> TextViewChanges {
         TextViewChanges {
             position: Last::one(),
-            text: Last::one()
+            text: Last::one(),
         }
     }
 }
@@ -235,37 +242,35 @@ impl Patch for TextView {
     type Change = TextViewChanges;
 
     fn patch(&mut self, rhs: TextViewChanges) -> bool {
-        return self.position.patch(rhs.position) |
-            self.text.patch(rhs.text);
+        return self.position.patch(rhs.position) | self.text.patch(rhs.text);
     }
 }
 
 impl TextView {
-    pub fn patch_and_redraw(&mut self,
-                            app: &mut appctx::ApplicationContext,
-                            patch: TextViweChanges) {
+    pub fn patch_and_redraw(
+        &mut self,
+        app: &mut appctx::ApplicationContext,
+        patch: TextViewChanges,
+    ) {
         let dirty = self.patch(patch);
         if !dirty {
-           return;
+            return;
         }
 
         let framebuffer = app.get_framebuffer_ref();
+        let Atomic(position) = self.position;
 
-        let old_filled_rect = match self.last_drawn_rect {
+        let _old_filled_rect = match self.last_drawn_rect {
             Some(rect) => {
                 // Clear the background on the last occupied region
-                framebuffer.fill_rect(
-                    rect.top_left().cast().unwrap(),
-                    rect.size(),
-                    color::WHITE
-                );
+                framebuffer.fill_rect(rect.top_left().cast().unwrap(), rect.size(), color::WHITE);
 
                 // We have filled the old_filled_rect, now we need to also refresh that but if
                 // only if it isn't at the same spot. Otherwise we will be refreshing it for no
                 // reason and showing a blank frame. There is of course still a caveat since we don't
                 // know the dimensions of a drawn text before it is actually drawn.
                 // TODO: Take care of the point above ^
-                if rect.top_left() != self.position.cast().unwrap() {
+                if rect.top_left() != position.cast().unwrap() {
                     framebuffer.partial_refresh(
                         &rect,
                         PartialRefreshMode::Wait,
@@ -282,14 +287,15 @@ impl TextView {
             None => mxcfb_rect::invalid(),
         };
 
+        let Atomic(text) = self.text.clone();
         let rect = app.display_text(
-            self.position.cast().unwrap(),
+            position.cast().unwrap(),
             color::WHITE,
             35.0,
             2,
             8,
             text.to_string(),
-            UIConstraintRefresh::Refresh
+            UIConstraintRefresh::Refresh,
         );
 
         if let Some(last_rect) = self.last_drawn_rect {
@@ -320,44 +326,96 @@ pub fn view_(
         position: TextView {
             position: position.position,
             last_drawn_rect: Option::default(),
-            text: text.position
+            text: text.position,
         },
         velocity: TextViewChanges {
             position: position.velocity,
-            text: text.velocity
-        }
+            text: text.velocity,
+        },
     }
 }
 
-pub type Component<Model: Patch, F: Fn(Model::Change) -> ()> =
-    fn(Jet<Atomic<F>>, Jet<&Model>, Jet<View>);
+pub trait OnChange {
+    type Change: Monoid;
 
-use std::rc::Rc;
-use std::cell::RefCell;
+    fn call(&mut self, change: Self::Change);
+}
+pub trait Component {
+    type Model: Patch;
 
-pub fn run<Model: Patch, F: Fn(Model::Change) -> ()>(
-    component: Component<Model, F>,
-    initial_model: Model
-) {
-    let initial_model_rc = Rc(initial_model);
+    fn run(
+        &self,
+        on_change: Jet<
+            Atomic<&dyn OnChange<Change = <<Self as Component>::Model as Patch>::Change>>,
+        >,
+        model: Jet<Self::Model>,
+    ) -> Jet<TextView>;
+}
 
-    let shared_model = Rc(RefCell(initial_model));
-    let shared_view  = Rc(RefCell(Option::default()));
+struct RunOnChange<'a, Model: Patch> {
+    // I need to unsafe tie recursive knot somehow?
+    component: &'a dyn Component<Model = Model>,
+    app: appctx::ApplicationContext<'a>,
+    view: Rc<RefCell<Option<TextView>>>,
+    model: Rc<RefCell<Model>>,
+}
+impl<'a, Model: Patch> OnChange for RunOnChange<'a, Model> {
+    type Change = Model::Change;
 
+    fn call(&mut self, change: Self::Change) {
+        let dv = self
+            .component
+            .run(
+                Jet::constant(Atomic(self)),
+                Jet {
+                    position: *self.model.borrow_mut(),
+                    velocity: change,
+                },
+            )
+            .velocity;
+        self.view
+            .borrow_mut()
+            .unwrap()
+            .patch_and_redraw(&mut self.app, dv);
+    }
+}
+
+pub fn run<Model: Patch>(component: &dyn Component<Model = Model>, initial_model: Model) {
+    // Takes callback functions as arguments
+    // They are called with the event and the &mut framebuffer
+    let mut app: appctx::ApplicationContext =
+        appctx::ApplicationContext::new(|app, button| {}, |app, input| {}, |app, input| {});
+
+    let initial_model_rc = Rc::new(initial_model);
+
+    let shared_model = Rc::new(RefCell::new(initial_model));
+    let shared_view: Rc<RefCell<Option<TextView>>> = Rc::new(RefCell::new(Option::default()));
+    /*
+     *
     let on_change_model = Rc::clone(&shared_model);
     let on_change_view = Rc::clone(&shared_view);
+
+    let on_change_box = Rc::new(RefCell::new(Option::default()));
     let on_change =
-        | model_change | {
+        move | model_change | {
+             let on_change = on_change_box.borrow().unwrap();
              let dv =
-                component(Jet::constant(Atomic(on_change)), Jet { position: &on_change_model, velocity: &model_change }).velocity;
-             on_change_view.borrow_mut().unwrap().patch_and_redraw(dv);
+                component(
+                    Jet::constant(Atomic(on_change)),
+                    Jet { position: *on_change_model.borrow_mut()
+                        , velocity: model_change }
+                ).velocity;
+             on_change_view.borrow_mut().unwrap().patch_and_redraw(&app, dv);
         };
+    let on_change_box_mut = on_change_box.borrow_mut();
+    *on_change_box_mut = Some(on_change);
 
     // bootstrap it
     let initial_view =
-        component(Jet::constant(Atomic(on_change)), Jet::constant(&initial_model_rc).position;
+        component(Jet::constant(Atomic(on_change)), Jet::constant(initial_model_rc).position;
 
     let mut ref v = shared_view.borrow_mut();
     *v = Some(initial_view);
     on_change(Model::Change::one());
+    */
 }
