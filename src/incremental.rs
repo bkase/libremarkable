@@ -68,6 +68,7 @@ impl<A> Patch for Atomic<A> {
         }
     }
 }
+
 pub struct Jet<A: Patch> {
     position: A,
     velocity: A::Change,
@@ -217,6 +218,16 @@ pub struct TextView {
     text: Atomic<String>,
 }
 
+impl Clone for TextView {
+    fn clone(&self) -> TextView {
+        TextView {
+            position: self.position.clone(),
+            last_drawn_rect: self.last_drawn_rect.clone(),
+            text: self.text.clone(),
+        }
+    }
+}
+
 pub struct TextViewChanges {
     position: Last<cgmath::Point2<i32>>,
     text: Last<String>,
@@ -352,14 +363,29 @@ pub trait Component {
     ) -> Jet<TextView>;
 }
 
-struct RunOnChange<'a, Model: Patch> {
+pub struct SampleComponent;
+impl Component for SampleComponent {
+    type Model = Atomic<String>;
+    fn run(
+        &self,
+        _on_change: Jet<
+            Atomic<&dyn OnChange<Change = <<Self as Component>::Model as Patch>::Change>>,
+        >,
+        model: Jet<Self::Model>,
+    ) -> Jet<TextView> {
+        let pt = cgmath::Point2 { x: 5, y: 5 };
+        view_(Jet::constant(Atomic(pt)), model)
+    }
+}
+
+struct RunOnChange<'a, Model: Clone + Patch> {
     // I need to unsafe tie recursive knot somehow?
-    component: &'a dyn Component<Model = Model>,
+    component: Rc<dyn Component<Model = Model>>,
     app: appctx::ApplicationContext<'a>,
     view: Rc<RefCell<Option<TextView>>>,
     model: Rc<RefCell<Model>>,
 }
-impl<'a, Model: Patch> OnChange for RunOnChange<'a, Model> {
+impl<'a, Model: Clone + Patch> OnChange for RunOnChange<'a, Model> {
     type Change = Model::Change;
 
     fn call(&mut self, change: Self::Change) {
@@ -368,54 +394,45 @@ impl<'a, Model: Patch> OnChange for RunOnChange<'a, Model> {
             .run(
                 Jet::constant(Atomic(self)),
                 Jet {
-                    position: *self.model.borrow_mut(),
+                    position: self.model.borrow().clone(),
                     velocity: change,
                 },
             )
             .velocity;
         self.view
-            .borrow_mut()
+            .borrow()
+            .clone()
             .unwrap()
             .patch_and_redraw(&mut self.app, dv);
     }
 }
 
-pub fn run<Model: Patch>(component: &dyn Component<Model = Model>, initial_model: Model) {
+pub fn run<Model: Clone + Patch>(
+    component: Rc<dyn Component<Model = Model>>,
+    initial_model: Model,
+) {
     // Takes callback functions as arguments
     // They are called with the event and the &mut framebuffer
-    let mut app: appctx::ApplicationContext =
-        appctx::ApplicationContext::new(|app, button| {}, |app, input| {}, |app, input| {});
-
-    let initial_model_rc = Rc::new(initial_model);
+    let app: appctx::ApplicationContext =
+        appctx::ApplicationContext::new(|_app, _button| {}, |_app, _input| {}, |_app, _input| {});
 
     let shared_model = Rc::new(RefCell::new(initial_model));
     let shared_view: Rc<RefCell<Option<TextView>>> = Rc::new(RefCell::new(Option::default()));
-    /*
-     *
-    let on_change_model = Rc::clone(&shared_model);
-    let on_change_view = Rc::clone(&shared_view);
 
-    let on_change_box = Rc::new(RefCell::new(Option::default()));
-    let on_change =
-        move | model_change | {
-             let on_change = on_change_box.borrow().unwrap();
-             let dv =
-                component(
-                    Jet::constant(Atomic(on_change)),
-                    Jet { position: *on_change_model.borrow_mut()
-                        , velocity: model_change }
-                ).velocity;
-             on_change_view.borrow_mut().unwrap().patch_and_redraw(&app, dv);
-        };
-    let on_change_box_mut = on_change_box.borrow_mut();
-    *on_change_box_mut = Some(on_change);
+    let mut on_change = RunOnChange {
+        component: component,
+        app: app,
+        view: shared_view,
+        model: shared_model,
+    };
 
-    // bootstrap it
-    let initial_view =
-        component(Jet::constant(Atomic(on_change)), Jet::constant(initial_model_rc).position;
+    let initial_view = component
+        .run(
+            Jet::constant(Atomic(&on_change)),
+            Jet::constant(shared_model.borrow().clone()),
+        )
+        .position;
 
-    let mut ref v = shared_view.borrow_mut();
-    *v = Some(initial_view);
-    on_change(Model::Change::one());
-    */
+    *shared_view.borrow_mut() = Some(initial_view);
+    on_change.call(Model::Change::one())
 }
