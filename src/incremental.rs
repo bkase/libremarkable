@@ -420,17 +420,14 @@ pub fn run<Model: Clone + Patch>(
     let shared_view: Rc<RefCell<Option<TextView>>> = Rc::new(RefCell::new(Option::default()));
 
     let mut on_change = RunOnChange {
-        component: component,
+        component: component.clone(),
         app: app,
-        view: shared_view,
-        model: shared_model,
+        view: shared_view.clone(),
+        model: shared_model.clone(),
     };
-
+    let model = Jet::constant(shared_model.borrow().clone());
     let initial_view = component
-        .run(
-            Jet::constant(Atomic(&on_change)),
-            Jet::constant(shared_model.borrow().clone()),
-        )
+        .run(Jet::constant(Atomic(&on_change)), model)
         .position;
 
     *shared_view.borrow_mut() = Some(initial_view);
