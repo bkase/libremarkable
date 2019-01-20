@@ -380,7 +380,7 @@ impl Component for SampleComponent {
         >,
         model: Jet<Self::Model>,
     ) -> Jet<TextView> {
-        let pt = cgmath::Point2 { x: 5, y: 5 };
+        let pt = cgmath::Point2 { x: 200, y: 200 };
         view_(Jet::constant(Atomic(pt)), model)
     }
 }
