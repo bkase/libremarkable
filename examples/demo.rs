@@ -658,9 +658,28 @@ fn on_button_press(app: &mut appctx::ApplicationContext, input: gpio::GPIOEvent)
     };
 }
 
+use libremarkable::incremental;
+use libremarkable::incremental::SampleComponent;
+use std::rc::Rc;
+
 fn main() {
     env_logger::init();
 
+    let component = SampleComponent {};
+
+    incremental::run(
+        Rc::new(component),
+        incremental::Atomic::pure("Hello World".to_string()),
+    );
+
+    info!("Run returned");
+
+    let clock_thread = std::thread::spawn(move || {
+        sleep(Duration::from_millis(30 * 1000));
+    });
+    clock_thread.join().unwrap();
+
+    /*
     // Takes callback functions as arguments
     // They are called with the event and the &mut framebuffer
     let mut app: appctx::ApplicationContext =
@@ -677,471 +696,471 @@ fn main() {
             refresh: UIConstraintRefresh::Refresh,
 
             /* We could have alternatively done this:
-            
+
                // Create a clickable region for multitouch input and associate it with its handler fn
                app.create_active_region(10, 900, 240, 480, on_touch_rustlogo);
             */
-            onclick: Some(on_touch_rustlogo),
-            inner: UIElement::Image {
-                img: image::load_from_memory(include_bytes!("../assets/rustlang.png")).unwrap(),
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_touch_rustlogo),
+    inner: UIElement::Image {
+    img: image::load_from_memory(include_bytes!("../assets/rustlang.png")).unwrap(),
+    },
+    ..Default::default()
+    },
     );
 
     // Draw the borders for the canvas region
     app.add_element(
-        "canvasRegion",
-        UIElementWrapper {
-            position: CANVAS_REGION.top_left().cast().unwrap() + cgmath::vec2(0, -2),
-            refresh: UIConstraintRefresh::RefreshAndWait,
-            onclick: None,
-            inner: UIElement::Region {
-                size: CANVAS_REGION.size().cast().unwrap() + cgmath::vec2(1, 3),
-                border_px: 2,
-                border_color: color::BLACK,
-            },
-            ..Default::default()
-        },
+    "canvasRegion",
+    UIElementWrapper {
+    position: CANVAS_REGION.top_left().cast().unwrap() + cgmath::vec2(0, -2),
+    refresh: UIConstraintRefresh::RefreshAndWait,
+    onclick: None,
+    inner: UIElement::Region {
+    size: CANVAS_REGION.size().cast().unwrap() + cgmath::vec2(1, 3),
+    border_px: 2,
+    border_color: color::BLACK,
+    },
+    ..Default::default()
+    },
     );
 
     app.add_element(
-        "colortest-rgb",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 960, y: 300 },
-            refresh: UIConstraintRefresh::Refresh,
+    "colortest-rgb",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 960, y: 300 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(draw_color_test_rgb),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Show RGB Test Image".to_owned(),
-                scale: 35.0,
-                border_px: 3,
-            },
-            ..Default::default()
-        },
+    onclick: Some(draw_color_test_rgb),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Show RGB Test Image".to_owned(),
+    scale: 35.0,
+    border_px: 3,
+    },
+    ..Default::default()
+    },
     );
 
     // Zoom Out Button
     app.add_element(
-        "zoomoutButton",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 960, y: 370 },
-            refresh: UIConstraintRefresh::Refresh,
+    "zoomoutButton",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 960, y: 370 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(on_zoom_out),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Zoom Out".to_owned(),
-                scale: 45.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_zoom_out),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Zoom Out".to_owned(),
+    scale: 45.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
     // Blur Toggle
     app.add_element(
-        "blurToggle",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1155, y: 370 },
-            refresh: UIConstraintRefresh::Refresh,
+    "blurToggle",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1155, y: 370 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(on_blur_canvas),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Blur".to_owned(),
-                scale: 45.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_blur_canvas),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Blur".to_owned(),
+    scale: 45.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
     // Invert Toggle
     app.add_element(
-        "invertToggle",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1247, y: 370 },
-            refresh: UIConstraintRefresh::Refresh,
+    "invertToggle",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1247, y: 370 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(on_invert_canvas),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Invert".to_owned(),
-                scale: 45.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_invert_canvas),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Invert".to_owned(),
+    scale: 45.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
 
     // Save/Restore Controls
     app.add_element(
-        "saveButton",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 960, y: 440 },
-            refresh: UIConstraintRefresh::Refresh,
+    "saveButton",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 960, y: 440 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(on_save_canvas),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Save".to_owned(),
-                scale: 45.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_save_canvas),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Save".to_owned(),
+    scale: 45.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
 
     app.add_element(
-        "restoreButton",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1080, y: 440 },
-            refresh: UIConstraintRefresh::Refresh,
+    "restoreButton",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1080, y: 440 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(on_load_canvas),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Load".to_owned(),
-                scale: 45.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_load_canvas),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Load".to_owned(),
+    scale: 45.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
 
     // Touch Mode Toggle
     app.add_element(
-        "touchMode",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 960, y: 510 },
-            refresh: UIConstraintRefresh::Refresh,
+    "touchMode",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 960, y: 510 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(on_change_touchdraw_mode),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Touch Mode".to_owned(),
-                scale: 45.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_change_touchdraw_mode),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Touch Mode".to_owned(),
+    scale: 45.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "touchModeIndicator",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1210, y: 510 },
-            refresh: UIConstraintRefresh::Refresh,
+    "touchModeIndicator",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1210, y: 510 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: None,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "None".to_owned(),
-                scale: 40.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    onclick: None,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "None".to_owned(),
+    scale: 40.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
 
     // Color Mode Toggle
     app.add_element(
-        "colorToggle",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 960, y: 580 },
-            refresh: UIConstraintRefresh::Refresh,
+    "colorToggle",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 960, y: 580 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: Some(on_toggle_eraser),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Draw Color".to_owned(),
-                scale: 45.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    onclick: Some(on_toggle_eraser),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Draw Color".to_owned(),
+    scale: 45.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "colorIndicator",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1210, y: 580 },
-            refresh: UIConstraintRefresh::Refresh,
+    "colorIndicator",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1210, y: 580 },
+    refresh: UIConstraintRefresh::Refresh,
 
-            onclick: None,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: G_DRAW_MODE.load(Ordering::Relaxed).color_as_string(),
-                scale: 40.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    onclick: None,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: G_DRAW_MODE.load(Ordering::Relaxed).color_as_string(),
+    scale: 40.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
 
     // Size Controls
     app.add_element(
-        "decreaseSizeSkip",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 960, y: 670 },
-            refresh: UIConstraintRefresh::Refresh,
-            onclick: Some(|appctx, _| {
-                change_brush_width(appctx, -10);
-            }),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "--".to_owned(),
-                scale: 90.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    "decreaseSizeSkip",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 960, y: 670 },
+    refresh: UIConstraintRefresh::Refresh,
+    onclick: Some(|appctx, _| {
+    change_brush_width(appctx, -10);
+    }),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "--".to_owned(),
+    scale: 90.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "decreaseSize",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1030, y: 670 },
-            refresh: UIConstraintRefresh::Refresh,
-            onclick: Some(|appctx, _| {
-                change_brush_width(appctx, -1);
-            }),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "-".to_owned(),
-                scale: 90.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    "decreaseSize",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1030, y: 670 },
+    refresh: UIConstraintRefresh::Refresh,
+    onclick: Some(|appctx, _| {
+    change_brush_width(appctx, -1);
+    }),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "-".to_owned(),
+    scale: 90.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "displaySize",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1080, y: 670 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: format!("size: {0}", G_DRAW_MODE.load(Ordering::Relaxed).get_size()),
-                scale: 45.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    "displaySize",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1080, y: 670 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: format!("size: {0}", G_DRAW_MODE.load(Ordering::Relaxed).get_size()),
+    scale: 45.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "increaseSize",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1240, y: 670 },
-            refresh: UIConstraintRefresh::Refresh,
-            onclick: Some(|appctx, _| {
-                change_brush_width(appctx, 1);
-            }),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "+".to_owned(),
-                scale: 60.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
+    "increaseSize",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1240, y: 670 },
+    refresh: UIConstraintRefresh::Refresh,
+    onclick: Some(|appctx, _| {
+    change_brush_width(appctx, 1);
+    }),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "+".to_owned(),
+    scale: 60.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "increaseSizeSkip",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1295, y: 670 },
-            refresh: UIConstraintRefresh::Refresh,
-            onclick: Some(|appctx, _| {
-                change_brush_width(appctx, 10);
-            }),
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "++".to_owned(),
-                scale: 60.0,
-                border_px: 5,
-            },
-            ..Default::default()
-        },
-    );
-
-    app.add_element(
-        "exitToXochitl",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 50 },
-            refresh: UIConstraintRefresh::Refresh,
-
-            onclick: None,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Press POWER to return to reMarkable".to_owned(),
-                scale: 35.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
-    );
-    app.add_element(
-        "availAt",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 620 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Available at:".to_owned(),
-                scale: 70.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
-    );
-    app.add_element(
-        "github",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 690 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "github.com/canselcik/libremarkable".to_owned(),
-                scale: 55.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
-    );
-    app.add_element(
-        "l1",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 350 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Low Latency eInk Display Partial Refresh API".to_owned(),
-                scale: 45.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
-    );
-    app.add_element(
-        "l3",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 400 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Capacitive Multitouch Input Support".to_owned(),
-                scale: 45.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
-    );
-    app.add_element(
-        "l2",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 450 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Physical Button Support".to_owned(),
-                scale: 45.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
-    );
-    app.add_element(
-        "l4",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 500 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Wacom Digitizer Support".to_owned(),
-                scale: 45.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    "increaseSizeSkip",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1295, y: 670 },
+    refresh: UIConstraintRefresh::Refresh,
+    onclick: Some(|appctx, _| {
+    change_brush_width(appctx, 10);
+    }),
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "++".to_owned(),
+    scale: 60.0,
+    border_px: 5,
+    },
+    ..Default::default()
+    },
     );
 
     app.add_element(
-        "tooltipLeft",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 15, y: 1850 },
-            refresh: UIConstraintRefresh::Refresh,
-            onclick: None,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Quick Redraw".to_owned(), // maybe quick redraw for the demo or waveform change?
-                scale: 50.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    "exitToXochitl",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 50 },
+    refresh: UIConstraintRefresh::Refresh,
+
+    onclick: None,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Press POWER to return to reMarkable".to_owned(),
+    scale: 35.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "tooltipMiddle",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 565, y: 1850 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Full Redraw".to_owned(),
-                scale: 50.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    "availAt",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 620 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Available at:".to_owned(),
+    scale: 70.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "tooltipRight",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 1112, y: 1850 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: "Disable Touch".to_owned(),
-                scale: 50.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    "github",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 690 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "github.com/canselcik/libremarkable".to_owned(),
+    scale: 55.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
+    );
+    app.add_element(
+    "l1",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 350 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Low Latency eInk Display Partial Refresh API".to_owned(),
+    scale: 45.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
+    );
+    app.add_element(
+    "l3",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 400 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Capacitive Multitouch Input Support".to_owned(),
+    scale: 45.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
+    );
+    app.add_element(
+    "l2",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 450 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Physical Button Support".to_owned(),
+    scale: 45.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
+    );
+    app.add_element(
+    "l4",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 500 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Wacom Digitizer Support".to_owned(),
+    scale: 45.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
+    );
+
+    app.add_element(
+    "tooltipLeft",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 15, y: 1850 },
+    refresh: UIConstraintRefresh::Refresh,
+    onclick: None,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Quick Redraw".to_owned(), // maybe quick redraw for the demo or waveform change?
+    scale: 50.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
+    );
+    app.add_element(
+    "tooltipMiddle",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 565, y: 1850 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Full Redraw".to_owned(),
+    scale: 50.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
+    );
+    app.add_element(
+    "tooltipRight",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 1112, y: 1850 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: "Disable Touch".to_owned(),
+    scale: 50.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
 
     // Create the top bar's time and battery labels. We can mutate these later.
     let dt: DateTime<Local> = Local::now();
     app.add_element(
-        "battery",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 215 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: format!(
-                    "{0:<128}",
-                    format!(
-                        "{0} — {1}%",
-                        battery::human_readable_charging_status().unwrap(),
-                        battery::percentage().unwrap()
-                    )
-                ),
-                scale: 44.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    "battery",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 215 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: format!(
+    "{0:<128}",
+    format!(
+    "{0} — {1}%",
+    battery::human_readable_charging_status().unwrap(),
+    battery::percentage().unwrap()
+    )
+    ),
+    scale: 44.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
     app.add_element(
-        "time",
-        UIElementWrapper {
-            position: cgmath::Point2 { x: 30, y: 150 },
-            refresh: UIConstraintRefresh::Refresh,
-            inner: UIElement::Text {
-                foreground: color::BLACK,
-                text: format!("{}", dt.format("%F %r")),
-                scale: 75.0,
-                border_px: 0,
-            },
-            ..Default::default()
-        },
+    "time",
+    UIElementWrapper {
+    position: cgmath::Point2 { x: 30, y: 150 },
+    refresh: UIConstraintRefresh::Refresh,
+    inner: UIElement::Text {
+    foreground: color::BLACK,
+    text: format!("{}", dt.format("%F %r")),
+    scale: 75.0,
+    border_px: 0,
+    },
+    ..Default::default()
+    },
     );
 
     // Draw the scene
@@ -1150,36 +1169,36 @@ fn main() {
     // Get a &mut to the framebuffer object, exposing many convenience functions
     let appref = app.upgrade_ref();
     let clock_thread = std::thread::spawn(move || {
-        loop_update_topbar(appref, 30 * 1000);
+    loop_update_topbar(appref, 30 * 1000);
     });
 
     app.execute_lua(
-        r#"
-      function draw_box(y, x, height, width, borderpx, bordercolor)
-        local maxy = y+height;
-        local maxx = x+width;
-        for cy=y,maxy,1 do
-          for cx=x,maxx,1 do
-            if (math.abs(cx-x) < borderpx or math.abs(maxx-cx) < borderpx) or
-               (math.abs(cy-y) < borderpx or math.abs(maxy-cy) < borderpx) then
-              fb.set_pixel(cy, cx, bordercolor);
-            end
-          end
-        end
-      end
+    r#"
+    function draw_box(y, x, height, width, borderpx, bordercolor)
+    local maxy = y+height;
+    local maxx = x+width;
+    for cy=y,maxy,1 do
+    for cx=x,maxx,1 do
+    if (math.abs(cx-x) < borderpx or math.abs(maxx-cx) < borderpx) or
+    (math.abs(cy-y) < borderpx or math.abs(maxy-cy) < borderpx) then
+    fb.set_pixel(cy, cx, bordercolor);
+    end
+    end
+    end
+    end
 
-      top = 430;
-      left = 570;
-      width = 320;
-      height = 90;
-      borderpx = 3;
-      draw_box(top, left, height, width, borderpx, 255);
+    top = 430;
+    left = 570;
+    width = 320;
+    height = 90;
+    borderpx = 3;
+    draw_box(top, left, height, width, borderpx, 255);
 
-      -- Draw black text inside the box. Notice the text is bottom aligned.
-      fb.draw_text(top+55, left+22, '...also supports Lua', 30, 255);
+    -- Draw black text inside the box. Notice the text is bottom aligned.
+    fb.draw_text(top+55, left+22, '...also supports Lua', 30, 255);
 
-      -- Update the drawn rect w/ `deep_plot=false` and `wait_for_update_complete=true`
-      fb.refresh(top, left, height, width, false, true);
+    -- Update the drawn rect w/ `deep_plot=false` and `wait_for_update_complete=true`
+    fb.refresh(top, left, height, width, false, true);
     "#,
     );
 
@@ -1188,4 +1207,5 @@ fn main() {
     // Blocking call to process events from digitizer + touchscreen + physical buttons
     app.dispatch_events(true, true, true);
     clock_thread.join().unwrap();
+     */
 }

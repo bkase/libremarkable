@@ -48,6 +48,12 @@ pub trait Patch {
 
 pub struct Atomic<A>(A);
 
+impl<A> Atomic<A> {
+    pub fn pure(a: A) -> Atomic<A> {
+        Atomic(a)
+    }
+}
+
 impl<A: Clone> Clone for Atomic<A> {
     fn clone(&self) -> Atomic<A> {
         let Atomic(this) = self;
@@ -413,8 +419,11 @@ pub fn run<Model: Clone + Patch>(
 ) {
     // Takes callback functions as arguments
     // They are called with the event and the &mut framebuffer
-    let app: appctx::ApplicationContext =
+    let mut app: appctx::ApplicationContext =
         appctx::ApplicationContext::new(|_app, _button| {}, |_app, _input| {}, |_app, _input| {});
+
+    app.clear(true);
+    // app.dispatch_events(true, true, true);
 
     let shared_model = Rc::new(RefCell::new(initial_model));
     let shared_view: Rc<RefCell<Option<TextView>>> = Rc::new(RefCell::new(Option::default()));
