@@ -269,10 +269,11 @@ impl TextView {
         app: &mut appctx::ApplicationContext,
         patch: TextViewChanges,
     ) {
-        let dirty = self.patch(patch);
-        if !dirty {
+        // TODO: Re-enable dirty optimizations
+        let _dirty = self.patch(patch);
+        /*if !dirty {
             return;
-        }
+        }*/
 
         let framebuffer = app.get_framebuffer_ref();
         let Atomic(position) = self.position;
