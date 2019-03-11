@@ -34,27 +34,29 @@ fn main() {
             })
             .unwrap();
 
-        let rgb888 = framebuffer::storage::rgbimage_from_u8_slice(
+        let mut rgb888 = framebuffer::storage::rgbimage_from_u8_slice(
             DISPLAYWIDTH.into(),
             DISPLAYHEIGHT.into(),
             &rgb565,
         )
         .unwrap();
+        let rotated = image::imageops::rotate270(&rgb888);
+
         let mut writer = BufWriter::new(Vec::new());
-        image::jpeg::JPEGEncoder::new(&mut writer)
+        image::png::PNGEncoder::new(&mut writer)
             .encode(
-                &*rgb888,
-                DISPLAYWIDTH.into(),
+                &*rotated,
                 DISPLAYHEIGHT.into(),
+                DISPLAYWIDTH.into(),
                 image::ColorType::RGB(8),
             )
             .unwrap();
+        let png = writer.into_inner().unwrap();
 
-        let jpg = writer.into_inner().unwrap();
         let mut response = Response::new_empty(tiny_http::StatusCode(200))
-            .with_data(&*jpg, Some(jpg.len()))
+            .with_data(&*png, Some(png.len()))
             .with_header(
-                "Content-Type: image/jpeg"
+                "Content-Type: image/png"
                     .parse::<tiny_http::Header>()
                     .unwrap(),
             );
